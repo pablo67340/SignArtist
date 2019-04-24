@@ -11,6 +11,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace Oxide.Plugins
 {
@@ -20,6 +21,7 @@ namespace Oxide.Plugins
     /*********************************************************************************
      * This plugin was originally created by Bombardir and then maintained by Nogrod.
      * It was rewritten from scratch by Mughisi on January 12th, 2018.
+     * The plugin was then updated by Bryce Wilkinson(pablo67340) on 4/24/2019
      *********************************************************************************/
 
     internal class SignArtist : RustPlugin
@@ -333,10 +335,11 @@ namespace Oxide.Plugins
             /// <param name="request">The requested <see cref="DownloadRequest"/> instance. </param>
             private IEnumerator DownloadImage(DownloadRequest request)
             {
-                using (WWW www = new WWW(request.Url))
+                // Needed to update this to the latest UnityWebRequestTexture class, GetTexture method.
+                using (UnityWebRequest www = UnityWebRequestTexture.GetTexture(request.Url))
                 {
                     // Wait for the webrequest to complete
-                    yield return www;
+                    yield return www.SendWebRequest();
 
                     // Verify that there is a valid reference to the plugin from this class.
                     if (signArtist == null)
@@ -355,7 +358,8 @@ namespace Oxide.Plugins
                     }
 
                     // Verify that the file doesn't exceed the maximum configured filesize.
-                    if (www.bytesDownloaded > signArtist.Settings.MaxFileSizeInBytes)
+                    // Changed to support isNetworkError, or, isHttpError
+                    if (www.isNetworkError || www.isHttpError)
                     {
                         // The file is too large, show a message to the player and attempt to start the next download.
                         signArtist.SendMessage(request.Sender, "FileTooLarge", signArtist.Settings.MaxSize);
@@ -369,7 +373,9 @@ namespace Oxide.Plugins
 
                     if (request.Raw)
                     {
-                        imageBytes = www.bytes;
+                        // Bytes are moved to the internal downloadHandler.
+                        // Make sure to cast this to ensure it's the right format.
+                        imageBytes = ((DownloadHandlerTexture)www.downloadHandler).data;
                     }
                     else
                     {
@@ -520,9 +526,10 @@ namespace Oxide.Plugins
             /// Converts the <see cref="Texture2D"/> from the webrequest to a <see cref="byte"/> array.
             /// </summary>
             /// <param name="www">The completed webrequest. </param>
-            private byte[] GetImageBytes(WWW www)
+            private byte[] GetImageBytes(UnityWebRequest www)
             {
-                Texture2D texture = www.texture;
+                // Texture is now inside the download handler. Casting required.
+                Texture2D texture = ((DownloadHandlerTexture)www.downloadHandler).texture;
                 byte[] image;
 
                 if (texture.format == TextureFormat.ARGB32 && !signArtist.Settings.EnforceJpeg)
